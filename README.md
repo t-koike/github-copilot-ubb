@@ -93,6 +93,32 @@ CSV は課金プレビューツールにアップロードして、現在の PRU
 
 また、IDE、クライアント、Copilot 拡張機能は最新の安定版に更新しておくことが推奨されています。古いバージョンでは、モデル価格や使用量表示、課金用語、使用状況アラートが正しく表示されない場合があります。
 
+## CSV から利用額を計算する
+
+このリポジトリには、Deno で動作する TypeScript CLI を含めています。使用状況レポート CSV の `aic_quantity` と `aic_gross_amount` を集計できます。
+
+CSV 全体の合計を確認します。外部依存はありません。
+
+```bash
+deno task calculate ./usage-report.csv
+```
+
+プランに含まれる AI Credits と比較し、超過見込みも確認できます。
+
+```bash
+deno task calculate ./usage-report.csv --plan pro
+deno task calculate ./usage-report.csv --plan business --seats 100
+deno task calculate ./usage-report.csv --plan enterprise --seats 50 --promotional
+```
+
+主なオプションは次のとおりです。
+
+| オプション | 説明 |
+| --- | --- |
+| `--plan` | `pro`, `pro-plus`, `max`, `business`, `enterprise` のいずれかを指定して、含まれる AI Credits と比較します。 |
+| `--seats` | 複数ユーザー分を見積もる場合のシート数です。既定値は `1` です。 |
+| `--promotional` | Business / Enterprise の移行初期 3 か月のプロモーションクレジットで計算します。 |
+
 ## 参考
 
 - [GitHub Copilot is moving to usage-based billing](https://github.blog/jp/2026-04-28-github-copilot-is-moving-to-usage-based-billing/)

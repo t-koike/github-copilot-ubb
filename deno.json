@@ -1,0 +1,12 @@
+{
+  "tasks": {
+    "calculate": "deno run --allow-read src/calculate-usage.ts",
+    "check": "deno check src/calculate-usage.ts",
+    "fmt": "deno fmt",
+    "lint": "deno lint"
+  },
+  "fmt": {
+    "include": ["deno.json", "src/"],
+    "lineWidth": 100
+  }
+}
