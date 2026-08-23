@@ -1,5 +1,7 @@
 # GitHub Copilot Usage-Based Billing メモ
 
+GitHub Copilot の Usage-Based Billing（従量課金制）への移行内容と、使用状況 CSV を集計する Deno CLI をまとめたリポジトリです。
+
 GitHub Copilot は、2026 年 6 月 1 日から Premium Request Unit（PRU）ベースの課金から、GitHub AI Credits を使う Usage-Based Billing（従量課金制）へ移行します。
 
 この README は、GitHub Blog の告知と GitHub Docs の移行ガイドをもとに、変更点と GitHub AI Credits の計算方法を整理したものです。
@@ -95,15 +97,29 @@ CSV は課金プレビューツールにアップロードして、現在の PRU
 
 ## CSV から利用額を計算する
 
-このリポジトリには、Deno で動作する TypeScript CLI を含めています。使用状況レポート CSV の `aic_quantity` と `aic_gross_amount` を集計できます。
+このリポジトリには、Deno で動作する TypeScript CLI が含まれています。GitHub の使用状況レポート CSV に含まれる `aic_quantity` と `aic_gross_amount` を読み込み、AI Credits と推定金額を合計します。外部依存はありません。
 
-CSV 全体の合計を確認します。外部依存はありません。
+### 前提
+
+- [Deno](https://deno.com/) がインストールされていること
+- GitHub の使用状況レポート CSV をダウンロードしていること
+- CSV に `aic_quantity` と `aic_gross_amount` の列が含まれていること
+
+CLI の型チェックは次のコマンドで実行できます。
+
+```bash
+deno task check
+```
+
+### 基本的な使い方
+
+CSV 全体の合計を確認します。
 
 ```bash
 deno task calculate ./usage-report.csv
 ```
 
-プランに含まれる AI Credits と比較し、超過見込みも確認できます。
+プランに含まれる AI Credits と比較し、残量・超過クレジット・超過見込み額を確認できます。
 
 ```bash
 deno task calculate ./usage-report.csv --plan pro
@@ -111,13 +127,43 @@ deno task calculate ./usage-report.csv --plan business --seats 100
 deno task calculate ./usage-report.csv --plan enterprise --seats 50 --promotional
 ```
 
-主なオプションは次のとおりです。
+出力例:
+
+```text
+CSV: usage-report.csv
+Rows: 2
+AI Credits used: 1,250
+Estimated gross amount: $12.50
+Plan: Copilot Pro
+Seats: 1
+Included AI Credits: 1,500
+Remaining AI Credits: 250
+Overage AI Credits: 0
+Estimated overage amount: $0.00
+```
+
+### オプション
 
 | オプション | 説明 |
 | --- | --- |
-| `--plan` | `pro`, `pro-plus`, `max`, `business`, `enterprise` のいずれかを指定して、含まれる AI Credits と比較します。 |
-| `--seats` | 複数ユーザー分を見積もる場合のシート数です。既定値は `1` です。 |
-| `--promotional` | Business / Enterprise の移行初期 3 か月のプロモーションクレジットで計算します。 |
+| `--plan <plan>` | `pro`, `pro-plus`, `max`, `business`, `enterprise` のいずれかを指定し、プランに含まれるクレジットと比較します。 |
+| `--seats <number>` | 含まれるクレジットをシート数倍して見積もります。既定値は `1` です。正の整数を指定してください。 |
+| `--promotional` | Business / Enterprise の移行初期 3 か月に付与されるプロモーションクレジットで計算します。`--plan business` または `--plan enterprise` と併用してください。 |
+| `-h`, `--help` | ヘルプを表示します。 |
+
+`business` と `enterprise` では、集計結果に課金エンティティ単位のクレジットプールであることが表示されます。`--plan` を省略した場合は、プラン比較を行わず CSV の集計結果だけを表示します。
+
+### CSV の入力例
+
+必要な列以外は無視されます。金額列には `$` や桁区切りを含む値も指定できます。
+
+```csv
+aic_quantity,aic_gross_amount
+1000,$10.00
+250,2.50
+```
+
+不正な CSV、必須列の不足、数値として解釈できない値がある場合は、エラーを表示して終了します。
 
 ## 参考
 
