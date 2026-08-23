@@ -2,19 +2,19 @@
 
 GitHub Copilot の Usage-Based Billing（従量課金制）への移行内容と、使用状況 CSV を集計する Deno CLI をまとめたリポジトリです。
 
-GitHub Copilot は、2026 年 6 月 1 日から Premium Request Unit（PRU）ベースの課金から、GitHub AI Credits を使う Usage-Based Billing（従量課金制）へ移行します。
+GitHub Copilot は、2026 年 6 月 1 日に Premium Request Unit（PRU）ベースの課金から、GitHub AI Credits を使う Usage-Based Billing（従量課金制）へ移行しました。
 
 この README は、GitHub Blog の告知と GitHub Docs の移行ガイドをもとに、変更点と GitHub AI Credits の計算方法を整理したものです。
 
-## 何が変わるか
+## 何が変わったか
 
-- PRU は GitHub AI Credits に置き換わります。
-- Copilot の基本月額料金は変わりません。
-- コード補完と Next Edit Suggestions は、引き続き有料プランに含まれ、AI Credits を消費しません。
+- 月次プランでは、PRU が GitHub AI Credits に置き換わりました。年次契約は有効期限まで PRU ベースです。
+- 月次の有料プランのサブスクリプション料金（個人プランの Pro / Pro+ / Max、組織プランの Business / Enterprise のシート料金）は変わりません。ただし、年次プランは廃止されます。
+- コード補完と Next Edit Suggestions は、引き続き有料プランで無制限に利用でき、AI Credits を消費しません。
 - Copilot Chat、Copilot CLI、Copilot cloud agent、Copilot Spaces、Spark、サードパーティのコーディングエージェントなど、Copilot AI モデルを使う機能は AI Credits を消費します。
-- クレジットを使い切った場合、追加利用を許可していれば公開レートで課金されます。追加利用を許可していない場合は、次の請求サイクルでクレジットがリセットされるまで対象機能の利用が制限されます。
-- 従来の低コストモデルへの自動フォールバックは廃止されます。
-- Copilot code review は AI Credits に加えて、GitHub Actions の実行時間も消費します。
+- 含まれるクレジットを使い切った後も、追加利用の予算を設定していれば、公開されているトークン単価に基づく追加料金で利用を継続できます。予算の上限に達した場合は、追加利用の支払い、プランのアップグレード、または次のリセットまで待つ必要があります。
+- 従来の低コストモデルへの自動フォールバックは廃止されました。
+- Copilot code review は、AI Credits と GitHub Actions の実行時間を別々に消費・計上します。
 
 ## プランに含まれる GitHub AI Credits
 
@@ -28,7 +28,9 @@ GitHub Copilot は、2026 年 6 月 1 日から Premium Request Unit（PRU）ベ
 | Copilot Pro+ | $39 | 3,900 | 3,100 | 7,000 |
 | Copilot Max | $100 | 10,000 | 10,000 | 20,000 |
 
-月次契約の Pro / Pro+ は 2026 年 6 月 1 日に自動で移行します。年次契約は有効期限まで既存の PRU ベースが維持されますが、2026 年 6 月 1 日以降はモデル乗数が変更されます。
+Copilot Free と Copilot Student には AI Credits の利用枠があり、モデルには auto model selection 経由でのみアクセスできます。Free には月 2,000 回のコード補完、Student には無制限のコード補完が含まれます。上表は月額料金と基本・フレックス割り当てが公表されている有料個人プランを対象にしています。
+
+月次契約の Pro / Pro+ は 2026 年 6 月 1 日に自動で Usage-Based Billing へ移行しました。年次プランは廃止され、既存の年次契約は有効期限まで従来の PRU ベースを利用できます。ただし、2026 年 6 月 1 日以降はモデル乗数が更新されます。有効期限後は、月次の有料プランへ申し込まない限り Copilot Free に移行します。
 
 ### 組織・Enterprise 向けプラン
 
@@ -39,7 +41,7 @@ GitHub Copilot は、2026 年 6 月 1 日から Premium Request Unit（PRU）ベ
 
 組織向けプランでは、ユーザーごとのクレジットは課金エンティティ単位でプールされます。たとえば Copilot Business のユーザーが 100 人いる場合、100 個の個別枠ではなく、190,000 AI Credits の共有プールとして扱われます。
 
-既存の Copilot Business / Enterprise 顧客には、移行開始から最初の 3 か月間、プロモーションとして追加クレジットが付与されます。
+既存の Copilot Business / Enterprise 顧客には、2026 年 6 月・7 月・8 月の 3 か月間、プロモーションとして追加クレジットが自動付与されます。プロモーション終了後は標準のクレジット数に戻ります。
 
 | プラン | プロモーション期間中のユーザーごとの月間 AI Credits |
 | --- | ---: |
@@ -55,7 +57,7 @@ Copilot の利用料金は、モデルとのやり取りで消費されたトー
 - 入力トークン: モデルに送信したプロンプトやコンテキスト
 - 出力トークン: モデルが生成した回答やコード
 - キャッシュされた入力トークン: モデルが再利用するコンテキスト
-- キャッシュ書き込みトークン: 一部の Anthropic モデルで発生するキャッシュ書き込み
+- キャッシュ書き込みトークン: Anthropic モデルや一部の OpenAI モデルで発生するキャッシュ書き込み
 
 基本式は次のとおりです。
 
@@ -80,9 +82,9 @@ Copilot の利用料金は、モデルとのやり取りで消費されたトー
 AI Credits: 38.5
 ```
 
-同じ操作でも、より高性能なモデルを選ぶ、会話が長くなる、複数ファイルをまたぐエージェント作業になる、モデル呼び出し回数が増える、といった場合は消費クレジットが増えます。日常的な軽い質問には軽量モデルを使うと、含まれるクレジットを長く使えます。
+同じ操作でも、より高性能なモデルを選ぶ、会話が長くなる、複数ファイルをまたぐエージェント作業になる、モデル呼び出し回数が増える、といった場合は消費クレジットが増えます。個人向け有料プランでは、基本クレジットを先に使い、超過後はフレックス割り当てが IDE・GitHub.com・Copilot CLI 全体に自動適用されます。未使用のクレジットは翌月へ繰り越されず、毎月 1 日 00:00:00 UTC にリセットされます。
 
-## 移行前に確認すること
+## 移行にあたって確認すること
 
 Copilot Pro / Pro+ では、Premium Request 分析ページから使用状況レポートをダウンロードできます。レポートには Usage-Based Billing での見積もりとして、次の列が追加されます。
 
@@ -168,5 +170,7 @@ aic_quantity,aic_gross_amount
 ## 参考
 
 - [GitHub Copilot is moving to usage-based billing](https://github.blog/jp/2026-04-28-github-copilot-is-moving-to-usage-based-billing/)
-- [使用量ベースの課金への移行の準備](https://docs.github.com/ja/copilot/how-tos/manage-and-track-spending/prepare-for-your-move-to-usage-based-billing)
+- [個人の使用量ベースの課金](https://docs.github.com/ja/copilot/concepts/billing/usage-based-billing-for-individuals)
+- [組織と企業の使用量ベースの課金](https://docs.github.com/ja/copilot/concepts/billing/usage-based-billing-for-organizations-and-enterprises)
 - [GitHub Copilot のモデルと価格設定](https://docs.github.com/ja/copilot/reference/copilot-billing/models-and-pricing)
+料金・クレジット数・対象機能・モデル単価は変更される可能性があるため、利用時は GitHub 公式ドキュメントを優先してください。
