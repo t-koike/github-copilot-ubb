@@ -87,6 +87,14 @@ function parseArgs(args: string[]): Options {
     throw new Error("CSV file path is required. Run with --help for usage.");
   }
 
+  if (plan === undefined && seats !== 1) {
+    throw new Error("--seats requires --plan business or --plan enterprise.");
+  }
+
+  if (plan !== undefined && !isPooledPlan(plan) && seats !== 1) {
+    throw new Error("--seats can only be used with --plan business or --plan enterprise.");
+  }
+
   if (promotional && plan !== "business" && plan !== "enterprise") {
     throw new Error("--promotional can only be used with --plan business or --plan enterprise.");
   }
@@ -116,6 +124,10 @@ function parsePlan(value: string): Plan {
 
 function isPlan(value: string): value is Plan {
   return Object.prototype.hasOwnProperty.call(PLAN_CONFIGS, value);
+}
+
+function isPooledPlan(plan: Plan): boolean {
+  return PLAN_CONFIGS[plan].pooled;
 }
 
 function parsePositiveInteger(value: string, optionName: string): number {
@@ -237,8 +249,8 @@ function parseNumber(value: string, rowNumber: number, columnName: string): numb
 
   const parsed = Number(normalized);
 
-  if (!Number.isFinite(parsed)) {
-    throw new Error(`Row ${rowNumber} column ${columnName} is not a valid number: ${value}`);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`Row ${rowNumber} column ${columnName} must be a non-negative number: ${value}`);
   }
 
   return parsed;
@@ -313,7 +325,8 @@ function printHelp(): void {
 Options:
   --plan <plan>     Compare against included credits.
                   Supported: pro, pro-plus, max, business, enterprise
-  --seats <number>  Number of seats for pooled or multi-seat estimates. Default: 1
+  --seats <number>  Number of Business/Enterprise seats for a pooled estimate. Default: 1
+                    Requires --plan business or --plan enterprise.
   --promotional     Use promotional Business/Enterprise credits for the first 3 months.
   -h, --help        Show this help.
 

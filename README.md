@@ -161,7 +161,7 @@ Estimated overage amount: $0.00
 | オプション | 説明 |
 | --- | --- |
 | `--plan <plan>` | `pro`, `pro-plus`, `max`, `business`, `enterprise` のいずれかを指定し、プランに含まれるクレジットと比較します。 |
-| `--seats <number>` | 含まれるクレジットをシート数倍して見積もります。既定値は `1` です。正の整数を指定してください。 |
+| `--seats <number>` | Business / Enterprise の含まれるクレジットをシート数倍して見積もります。`--plan business` または `--plan enterprise` と併用してください。既定値は `1` です。正の整数を指定してください。 |
 | `--promotional` | Business / Enterprise の移行初期 3 か月に付与されるプロモーションクレジットで計算します。`--plan business` または `--plan enterprise` と併用してください。 |
 | `-h`, `--help` | ヘルプを表示します。 |
 
@@ -177,7 +177,7 @@ aic_quantity,aic_gross_amount
 250,2.50
 ```
 
-不正な CSV、必須列の不足、数値として解釈できない値がある場合は、エラーを表示して終了します。
+不正な CSV、必須列の不足、空欄・負数を含む数値として解釈できない値がある場合は、エラーを表示して終了します。
 
 ## 情報源とポインタ
 
