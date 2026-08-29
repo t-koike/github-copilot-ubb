@@ -1,4 +1,4 @@
-type Plan = "pro" | "pro-plus" | "max" | "business" | "enterprise";
+export type Plan = "pro" | "pro-plus" | "max" | "business" | "enterprise";
 
 type PlanConfig = {
   label: string;
@@ -6,7 +6,7 @@ type PlanConfig = {
   pooled: boolean;
 };
 
-type CsvRecord = Record<string, string>;
+export type CsvRecord = Record<string, string>;
 
 const PLAN_CONFIGS: Record<Plan, PlanConfig> = {
   pro: { label: "Copilot Pro", includedCredits: 1_500, pooled: false },
@@ -28,7 +28,7 @@ type Options = {
   promotional: boolean;
 };
 
-type UsageTotals = {
+export type UsageTotals = {
   rows: number;
   aiCredits: number;
   grossAmountUsd: number;
@@ -112,7 +112,7 @@ function readRequiredValue(args: string[], index: number, optionName: string): s
   return value;
 }
 
-function parsePlan(value: string): Plan {
+export function parsePlan(value: string): Plan {
   if (isPlan(value)) {
     return value;
   }
@@ -130,7 +130,7 @@ function isPooledPlan(plan: Plan): boolean {
   return PLAN_CONFIGS[plan].pooled;
 }
 
-function parsePositiveInteger(value: string, optionName: string): number {
+export function parsePositiveInteger(value: string, optionName: string): number {
   const parsed = Number(value);
 
   if (!Number.isInteger(parsed) || parsed <= 0) {
@@ -140,7 +140,7 @@ function parsePositiveInteger(value: string, optionName: string): number {
   return parsed;
 }
 
-function parseCsv(csv: string): CsvRecord[] {
+export function parseCsv(csv: string): CsvRecord[] {
   const rows = parseCsvRows(csv.replace(/^\uFEFF/, ""));
 
   if (rows.length === 0) {
@@ -228,7 +228,7 @@ function hasAnyValue(row: string[]): boolean {
   return row.some((value) => value.trim() !== "");
 }
 
-function calculateTotals(records: CsvRecord[]): UsageTotals {
+export function calculateTotals(records: CsvRecord[]): UsageTotals {
   return records.reduce<UsageTotals>(
     (totals, record, index) => ({
       rows: totals.rows + 1,
@@ -335,8 +335,10 @@ Required CSV columns:
   aic_gross_amount  Estimated gross amount in USD`);
 }
 
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(`Error: ${message}`);
-  Deno.exit(1);
-});
+if (import.meta.main) {
+  main().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Error: ${message}`);
+    Deno.exit(1);
+  });
+}
