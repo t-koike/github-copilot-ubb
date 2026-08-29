@@ -250,7 +250,9 @@ function parseNumber(value: string, rowNumber: number, columnName: string): numb
   const parsed = Number(normalized);
 
   if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error(`Row ${rowNumber} column ${columnName} must be a non-negative number: ${value}`);
+    throw new Error(
+      `Row ${rowNumber} column ${columnName} must be a non-negative number: ${value}`,
+    );
   }
 
   return parsed;
