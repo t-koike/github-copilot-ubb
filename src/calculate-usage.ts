@@ -148,6 +148,15 @@ export function parseCsv(csv: string): CsvRecord[] {
   }
 
   const headers = rows[0].map((header) => header.trim());
+  if (headers.some((header) => header === "")) {
+    throw new Error("CSV contains an empty header.");
+  }
+
+  const duplicateHeaders = headers.filter((header, index) => headers.indexOf(header) !== index);
+  if (duplicateHeaders.length > 0) {
+    throw new Error(`CSV contains duplicate headers: ${[...new Set(duplicateHeaders)].join(", ")}`);
+  }
+
   const missingHeaders = ["aic_quantity", "aic_gross_amount"].filter(
     (requiredHeader) => !headers.includes(requiredHeader),
   );
@@ -176,28 +185,46 @@ function parseCsvRows(csv: string): string[][] {
   let row: string[] = [];
   let field = "";
   let inQuotes = false;
+  let afterClosingQuote = false;
 
   for (let index = 0; index < csv.length; index += 1) {
     const char = csv[index];
     const nextChar = csv[index + 1];
 
     if (char === '"') {
-      if (inQuotes && nextChar === '"') {
-        field += '"';
-        index += 1;
+      if (afterClosingQuote) {
+        throw new Error("CSV contains characters after a closing quote.");
+      }
+
+      if (inQuotes) {
+        if (nextChar === '"') {
+          field += '"';
+          index += 1;
+        } else {
+          inQuotes = false;
+          afterClosingQuote = true;
+        }
+      } else if (field === "") {
+        inQuotes = true;
       } else {
-        inQuotes = !inQuotes;
+        throw new Error("CSV contains a quote inside an unquoted field.");
       }
       continue;
     }
 
-    if (char === "," && !inQuotes) {
-      row.push(field);
-      field = "";
+    if (inQuotes) {
+      field += char;
       continue;
     }
 
-    if ((char === "\n" || char === "\r") && !inQuotes) {
+    if (char === ",") {
+      row.push(field);
+      field = "";
+      afterClosingQuote = false;
+      continue;
+    }
+
+    if (char === "\n" || char === "\r") {
       if (char === "\r" && nextChar === "\n") {
         index += 1;
       }
@@ -206,7 +233,12 @@ function parseCsvRows(csv: string): string[][] {
       rows.push(row);
       row = [];
       field = "";
+      afterClosingQuote = false;
       continue;
+    }
+
+    if (afterClosingQuote) {
+      throw new Error("CSV contains characters after a closing quote.");
     }
 
     field += char;
@@ -216,7 +248,7 @@ function parseCsvRows(csv: string): string[][] {
     throw new Error("CSV contains an unterminated quoted field.");
   }
 
-  if (field !== "" || row.length > 0) {
+  if (field !== "" || row.length > 0 || afterClosingQuote) {
     row.push(field);
     rows.push(row);
   }

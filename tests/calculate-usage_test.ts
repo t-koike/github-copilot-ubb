@@ -37,6 +37,25 @@ Deno.test("parseCsv rejects malformed rows and unterminated quotes", () => {
     () => parseCsv('aic_quantity,aic_gross_amount\n"1,2\n'),
     "CSV contains an unterminated quoted field.",
   );
+  assertThrows(
+    () => parseCsv('aic_quantity,aic_gross_amount\n"1"x,2\n'),
+    "CSV contains characters after a closing quote.",
+  );
+  assertThrows(
+    () => parseCsv('aic_quantity,aic_gross_amount\nab"cd,2\n'),
+    "CSV contains a quote inside an unquoted field.",
+  );
+});
+
+Deno.test("parseCsv rejects empty and duplicate headers", () => {
+  assertThrows(
+    () => parseCsv("aic_quantity,,aic_gross_amount\n1,2,3\n"),
+    "CSV contains an empty header.",
+  );
+  assertThrows(
+    () => parseCsv("aic_quantity,aic_quantity,aic_gross_amount\n1,2,3\n"),
+    "CSV contains duplicate headers: aic_quantity",
+  );
 });
 
 Deno.test("calculateTotals sums valid usage values", () => {
