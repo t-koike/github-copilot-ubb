@@ -31,7 +31,7 @@ type Options = {
 export type UsageTotals = {
   rows: number;
   aiCredits: number;
-  grossAmountUsd: number;
+  grossAmountCents: number;
 };
 
 async function main(): Promise<void> {
@@ -265,10 +265,10 @@ export function calculateTotals(records: CsvRecord[]): UsageTotals {
     (totals, record, index) => ({
       rows: totals.rows + 1,
       aiCredits: totals.aiCredits + parseNumber(record.aic_quantity, index + 2, "aic_quantity"),
-      grossAmountUsd: totals.grossAmountUsd +
-        parseNumber(record.aic_gross_amount, index + 2, "aic_gross_amount"),
+      grossAmountCents: totals.grossAmountCents +
+        parseUsdCents(record.aic_gross_amount, index + 2, "aic_gross_amount"),
     }),
-    { rows: 0, aiCredits: 0, grossAmountUsd: 0 },
+    { rows: 0, aiCredits: 0, grossAmountCents: 0 },
   );
 }
 
@@ -290,12 +290,35 @@ function parseNumber(value: string, rowNumber: number, columnName: string): numb
   return parsed;
 }
 
+function parseUsdCents(value: string, rowNumber: number, columnName: string): number {
+  const normalized = value.trim().replace(/^\$/, "").replace(/,/g, "");
+
+  if (normalized === "") {
+    throw new Error(`Row ${rowNumber} column ${columnName} is empty.`);
+  }
+
+  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) {
+    throw new Error(
+      `Row ${rowNumber} column ${columnName} must be a non-negative USD amount with at most 2 decimals: ${value}`,
+    );
+  }
+
+  const [whole, fraction = ""] = normalized.split(".");
+  const cents = Number(`${whole}${fraction.padEnd(2, "0")}`);
+
+  if (!Number.isSafeInteger(cents)) {
+    throw new Error(`Row ${rowNumber} column ${columnName} is too large: ${value}`);
+  }
+
+  return cents;
+}
+
 function printSummary(options: Options, totals: UsageTotals): void {
   const lines = [
     `CSV: ${basename(options.csvPath)}`,
     `Rows: ${totals.rows}`,
     `AI Credits used: ${formatNumber(totals.aiCredits)}`,
-    `Estimated gross amount: ${formatUsd(totals.grossAmountUsd)}`,
+    `Estimated gross amount: ${formatUsd(totals.grossAmountCents / 100)}`,
   ];
 
   if (options.plan !== undefined) {

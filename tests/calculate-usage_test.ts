@@ -64,7 +64,7 @@ Deno.test("calculateTotals sums valid usage values", () => {
   assertEquals(totals, {
     rows: 2,
     aiCredits: 1250,
-    grossAmountUsd: 12.5,
+    grossAmountCents: 1250,
   });
 });
 
@@ -75,6 +75,21 @@ Deno.test("numeric and plan arguments are validated", () => {
   assertThrows(() => parsePositiveInteger("0", "--seats"), "--seats must be a positive integer.");
   assertThrows(() => parsePositiveInteger("1.5", "--seats"), "--seats must be a positive integer.");
   assertThrows(() => parsePlan("free"), "Unknown plan: free.");
+});
+
+Deno.test("calculateTotals adds monetary values as cents", () => {
+  const totals = calculateTotals(
+    parseCsv("aic_quantity,aic_gross_amount\n1,0.10\n2,0.20\n"),
+  );
+
+  assertEquals(totals.grossAmountCents, 30);
+});
+
+Deno.test("parseCsv rejects monetary values with more than 2 decimals", () => {
+  assertThrows(
+    () => calculateTotals(parseCsv("aic_quantity,aic_gross_amount\n1,0.001\n")),
+    "must be a non-negative USD amount with at most 2 decimals",
+  );
 });
 
 function assertEquals<T>(actual: T, expected: T): void {
