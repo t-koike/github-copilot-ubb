@@ -16,16 +16,10 @@ const PLAN_CONFIGS: Record<Plan, PlanConfig> = {
   enterprise: { label: "Copilot Enterprise", includedCredits: 3_900, pooled: true },
 };
 
-const PROMOTIONAL_PLAN_CONFIGS: Partial<Record<Plan, PlanConfig>> = {
-  business: { label: "Copilot Business promotional", includedCredits: 3_000, pooled: true },
-  enterprise: { label: "Copilot Enterprise promotional", includedCredits: 7_000, pooled: true },
-};
-
 type Options = {
   csvPath: string;
   plan?: Plan;
   seats: number;
-  promotional: boolean;
 };
 
 export type UsageTotals = {
@@ -47,7 +41,6 @@ function parseArgs(args: string[]): Options {
   let csvPath = "";
   let plan: Plan | undefined;
   let seats = 1;
-  let promotional = false;
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -64,11 +57,6 @@ function parseArgs(args: string[]): Options {
 
     if (arg === "--seats") {
       seats = parsePositiveInteger(readRequiredValue(args, index += 1, "--seats"), "--seats");
-      continue;
-    }
-
-    if (arg === "--promotional") {
-      promotional = true;
       continue;
     }
 
@@ -95,11 +83,7 @@ function parseArgs(args: string[]): Options {
     throw new Error("--seats can only be used with --plan business or --plan enterprise.");
   }
 
-  if (promotional && plan !== "business" && plan !== "enterprise") {
-    throw new Error("--promotional can only be used with --plan business or --plan enterprise.");
-  }
-
-  return { csvPath, plan, seats, promotional };
+  return { csvPath, plan, seats };
 }
 
 function readRequiredValue(args: string[], index: number, optionName: string): string {
@@ -322,7 +306,7 @@ function printSummary(options: Options, totals: UsageTotals): void {
   ];
 
   if (options.plan !== undefined) {
-    const planConfig = resolvePlanConfig(options.plan, options.promotional);
+    const planConfig = PLAN_CONFIGS[options.plan];
     const includedCredits = planConfig.includedCredits * options.seats;
     const overageCredits = Math.max(totals.aiCredits - includedCredits, 0);
     const remainingCredits = Math.max(includedCredits - totals.aiCredits, 0);
@@ -351,18 +335,6 @@ function basename(path: string): string {
   return lastSegment ?? path;
 }
 
-function resolvePlanConfig(plan: Plan, promotional: boolean): PlanConfig {
-  if (promotional) {
-    const promotionalConfig = PROMOTIONAL_PLAN_CONFIGS[plan];
-
-    if (promotionalConfig !== undefined) {
-      return promotionalConfig;
-    }
-  }
-
-  return PLAN_CONFIGS[plan];
-}
-
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 2,
@@ -384,7 +356,6 @@ Options:
                   Supported: pro, pro-plus, max, business, enterprise
   --seats <number>  Number of Business/Enterprise seats for a pooled estimate. Default: 1
                     Requires --plan business or --plan enterprise.
-  --promotional     Use promotional Business/Enterprise credits for the first 3 months.
   -h, --help        Show this help.
 
 Required CSV columns:

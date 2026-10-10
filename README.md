@@ -4,7 +4,7 @@ GitHub Copilot の Usage-Based Billing（従量課金制）への移行内容と
 
 GitHub Copilot は、2026 年 6 月 1 日に Premium Request Unit（PRU）ベースの課金から、GitHub AI Credits を使う Usage-Based Billing（従量課金制）へ移行しました。
 
-この README は、GitHub Blog の告知と GitHub Docs の移行ガイドをもとに、変更点と GitHub AI Credits の計算方法を整理したものです。本文中の `[S1]`〜`[S5]` は、末尾の「情報源とポインタ」に対応します。GitHub の料金・提供機能・移行条件は更新される可能性があるため、判断時には必ずリンク先の現行記載を確認してください。
+この README は、GitHub Blog の告知と GitHub Docs の現行記載（2026 年 10 月 10 日時点で確認）をもとに、変更点と GitHub AI Credits の計算方法を整理したものです。本文中の `[S1]`〜`[S5]` は、末尾の「情報源とポインタ」に対応します。GitHub の料金・提供機能・移行条件は更新される可能性があるため、判断時には必ずリンク先の現行記載を確認してください。
 
 ## 何が変わったか
 
@@ -14,8 +14,9 @@ GitHub Copilot は、2026 年 6 月 1 日に Premium Request Unit（PRU）ベー
 - 月次の有料プランのサブスクリプション料金（個人プランの Pro / Pro+ / Max、組織プランの Business / Enterprise のシート料金）は変わりません。ただし、新規の年次プランは提供されなくなり、既存の年次契約はレガシーな扱いで有効期限まで維持されます。
 - コード補完と Next Edit Suggestions は、引き続き有料プランで無制限に利用でき、AI Credits を消費しません。
 - Copilot Chat、Copilot CLI、Copilot cloud agent、Copilot Spaces、Spark、サードパーティのコーディングエージェントなど、Copilot AI モデルを使う機能は AI Credits を消費します。
-- 含まれるクレジットを使い切った後の扱いは、個人プランと組織・Enterprise で異なります。個人プランは追加利用の予算を設定すれば、公開されているトークン単価に基づく従量課金で継続できます。組織・Enterprise は「AI credits 有料使用」ポリシーが既定で有効で、予算・支出上限を設定していない（または上限停止を有効にしていない）場合、追加料金が上限なく発生し得ます。ポリシーを無効にすると、含まれるプールを使い切った時点でブロックされます。
+- 含まれるクレジットを使い切った後の扱いは、個人プランと組織・Enterprise で異なります。個人プランは追加利用の予算を設定すれば、公開されているトークン単価に基づく従量課金で継続できます。組織・Enterprise は「AI credits 有料使用」ポリシーが既定で有効で、予算・支出上限を設定していない（または上限停止を有効にしていない）場合、追加料金が上限なく発生し得ます（追加利用が上限に達した場合は、続行するために消費済みの追加利用分を支払う必要があります）。ポリシーを無効にすると、含まれるプールを使い切った時点でブロックされます。
 - 個人・組織とも、予算や支出上限に達した場合に低コストモデルへ自動フォールバックすることはありません。コード補完と Next Edit Suggestions は AI Credits を消費しないため、引き続き利用できます。
+- 有料の個人プランでは、Copilot Chat、Copilot CLI、GitHub Copilot app、Copilot cloud agent で auto model selection を使うと、モデル費用が 10% 割引されます [S2]。
 - Copilot code review は、AI Credits と GitHub Actions の実行時間を別々に消費・計上します。
 
 ## プランに含まれる GitHub AI Credits
@@ -38,21 +39,16 @@ Copilot Free と Copilot Student には AI Credits の利用枠があり、モ�
 
 ### 組織・Enterprise 向けプラン
 
-組織・Enterprise の「ユーザーごとの月間クレジット」は個人別の上限ではなく、課金エンティティ単位の共有プールへの算入額です。共有プールとは別に、ユーザーレベル予算は各ユーザーのプール利用と従量課金利用の合計に対する常時のハードストップとして機能します。組織・Enterprise の組織・コストセンター・Enterprise 予算は、原則として共有プールを使い切った後の従量課金を制御するもので、ライセンス料金を含む月額請求総額の上限ではありません。
+組織・Enterprise の「ユーザーごとの月間クレジット」は個人別の上限ではなく、課金エンティティ単位の共有プールへの算入額です。共有プールとは別に、ユーザーレベル予算（全ユーザー共通・コストセンター単位・個人単位。より限定的なものが優先され、個人予算には有効期限を設定可能）は、各ユーザーのプール利用と従量課金利用の合計に対する常時のハードストップとして機能します。組織・コストセンター・Enterprise 予算は共有プールを使い切った後の従量課金を制御するもので、ライセンス料金を含む月額請求総額の上限ではありません。コストセンターには、そのコストセンターに割り当てられたライセンス分（Business 1,900 / Enterprise 3,900 × ライセンス数）までにプール利用を制限する「含まれる使用量の制御」も設定できます [S5]。
 
 | プラン | ユーザーごとの月間 AI Credits |
 | --- | ---: |
 | Copilot Business | 1,900 |
 | Copilot Enterprise | 3,900 |
 
-組織向けプランでは、ユーザーごとのクレジットは課金エンティティ単位でプールされます。たとえば Copilot Business のユーザーが 100 人いる場合、100 個の個別枠ではなく、190,000 AI Credits の共有プールとして扱われます。
+組織向けプランでは、ユーザーごとのクレジットは課金エンティティ単位でプールされます。月の途中でライセンスを追加するとプールは即時に増えますが、削除してもプールは縮小せず、次の課金サイクルから反映されます。含まれるクレジットは翌月へ繰り越されず、毎月 1 日 00:00:00 UTC にリセットされます。たとえば Copilot Business のユーザーが 100 人いる場合、100 個の個別枠ではなく、190,000 AI Credits の共有プールとして扱われます。
 
-既存の Copilot Business / Enterprise 顧客には、2026 年 6 月 1 日から 9 月 1 日までの最初の 3 か月間、プロモーションとして追加クレジットが自動付与されます。プロモーション終了後は標準のクレジット数に戻ります。この特典を新規契約者にも一律に付与されるものとは解釈しないでください。
-
-| プラン | プロモーション期間中のユーザーごとの月間 AI Credits |
-| --- | ---: |
-| Copilot Business | 3,000 |
-| Copilot Enterprise | 7,000 |
+なお、2026 年 6 月 1 日〜9 月 1 日に既存の Business / Enterprise 顧客へ付与されていたプロモーション（Business 3,000 / Enterprise 7,000）は終了しており、現行ドキュメントには記載されていません。2026 年 10 月時点の標準値は上表のとおりです。
 
 ## Usage-Based Billing の計算方法
 
@@ -65,7 +61,9 @@ Copilot の利用料金は、モデルとのやり取りで消費されたトー
 - 入力トークン: モデルに送信したプロンプトやコンテキスト
 - 出力トークン: モデルが生成した回答やコード
 - キャッシュされた入力トークン: モデルが再利用するコンテキスト
-- キャッシュ書き込みトークン: Anthropic モデルや一部の OpenAI モデルで発生するキャッシュ書き込み
+- キャッシュ書き込みトークン: Anthropic モデルと、GPT-5.6 / GPT-6 / GPT-6.1 系の OpenAI モデルで発生します（それ以前の OpenAI モデルには書き込み費用はありません）。
+- 入力トークンが閾値（モデルにより 100K / 200K / 272K）を超えると、Long context 区分の高い単価が適用されるモデルがあります。
+- 単価はモデルごとに異なります。最新の価格表は [S4] を参照してください（例: Gemini 3.7 / 3.8 Flash は 2026 年 12 月 31 日までプロモーション価格）。
 
 基本式は次のとおりです。
 
@@ -91,6 +89,23 @@ AI Credits: 38.5
 ```
 
 同じ操作でも、より高性能なモデルを選ぶ、会話が長くなる、複数ファイルをまたぐエージェント作業になる、モデル呼び出し回数が増える、といった場合は消費クレジットが増えます。個人向け有料プランでは、基本クレジットを先に使い、基本クレジットを超えた場合はフレックス割り当てが IDE・GitHub.com・Copilot CLI 全体に自動適用されます。フレックス割り当ては基本クレジットとは別の追加の毎月枠であり、これを「超過料金」と混同しないよう注意が必要です。含まれるクレジット（基本・フレックス）は翌月へ繰り越されず、毎月 1 日 00:00:00 UTC にリセットされます。
+
+## 最小バージョンの目安
+
+[S2][S3]
+
+使用量ベース課金の表示（モデル価格、使用量、課金用語、使用状況アラート）を正しく得るため、次のバージョン以上への更新が案内されています。古いバージョンでも動作はします。
+
+| IDE / クライアント / 拡張機能 | 最小バージョン |
+| --- | --- |
+| VS Code | 1.120 |
+| Visual Studio 2022 (17.x) | 17.14.33 |
+| Visual Studio 2026 (18.x) | 18.6.0 |
+| SQL Server Management Studio | 22.6 |
+| JetBrains IDEs (plugin) | 1.9.1 |
+| Eclipse (plugin) | 0.18.0 |
+| Xcode (extension) | 0.50.0 |
+| Copilot CLI | 1.0.48 |
 
 ## 移行にあたって確認すること
 
@@ -138,7 +153,7 @@ deno task calculate ./usage-report.csv
 ```bash
 deno task calculate ./usage-report.csv --plan pro
 deno task calculate ./usage-report.csv --plan business --seats 100
-deno task calculate ./usage-report.csv --plan enterprise --seats 50 --promotional
+deno task calculate ./usage-report.csv --plan enterprise --seats 50
 ```
 
 出力例:
@@ -162,7 +177,6 @@ Estimated overage amount: $0.00
 | --- | --- |
 | `--plan <plan>` | `pro`, `pro-plus`, `max`, `business`, `enterprise` のいずれかを指定し、プランに含まれるクレジットと比較します。 |
 | `--seats <number>` | Business / Enterprise の含まれるクレジットをシート数倍して見積もります。`--plan business` または `--plan enterprise` と併用してください。既定値は `1` です。正の整数を指定してください。 |
-| `--promotional` | Business / Enterprise の移行初期 3 か月に付与されるプロモーションクレジットで計算します。`--plan business` または `--plan enterprise` と併用してください。 |
 | `-h`, `--help` | ヘルプを表示します。 |
 
 `business` と `enterprise` では、集計結果に課金エンティティ単位のクレジットプールであることが表示されます。`--seats` による計算は、全シートが同じプランで 1 か月分の枠を持つという単純化した見積もりです。混在プラン、月途中のライセンス追加・削除、プロモーション対象外、ユーザーレベル予算、コストセンター・組織・Enterprise の予算は反映されないため、実際の利用可否や請求額の判定には使えません。`--plan` を省略した場合は、プラン比較を行わず CSV の集計結果だけを表示します。
@@ -186,10 +200,10 @@ aic_quantity,aic_gross_amount
 | ID | 情報源 | 確認するポインタ（ページ内の見出し・記載） |
 | --- | --- | --- |
 | [S1] | [GitHub Blog: GitHub Copilot is moving to usage-based billing](https://github.blog/jp/2026-04-28-github-copilot-is-moving-to-usage-based-billing/) | 移行日、月次・年次プランの移行、既存年次契約、移行スケジュール |
-| [S2] | [個人の使用量ベースの課金](https://docs.github.com/ja/copilot/concepts/billing/usage-based-billing-for-individuals) | 「GitHub AI Creditsとは」「AI creditsのしくみ」「GitHub AI Credits プラン別の許容量」「AI creditsでは何が課金されますか?」「含まれている AI creditsを超えるとどうなりますか?」 |
-| [S3] | [組織と企業の使用量ベースの課金](https://docs.github.com/ja/copilot/concepts/billing/usage-based-billing-for-organizations-and-enterprises) | 「AI creditsのしくみ」「既存の顧客のプロモーション金額」「含まれている AI creditsを超えるとどうなりますか?」 |
-| [S4] | [GitHub Copilot のモデルと価格設定](https://docs.github.com/ja/copilot/reference/copilot-billing/models-and-pricing) | 「モデルの価格のしくみ」「価格表」「コード補完」「Copilot code review の価格と使用コストに関する考慮事項」 |
-| [S5] | [使用量ベースの課金の予算](https://docs.github.com/ja/copilot/concepts/billing/budgets-for-usage-based-billing) | 「ユーザーレベルの予算」「コストセンターの予算」「組織の予算」「エンタープライズ予算」「ユーザーがブロックされた場合の動作」 |
+| [S2] | [Usage-based billing for individuals](https://docs.github.com/en/copilot/concepts/billing-and-usage/individuals/billing) | 「How do AI credits work?」「GitHub AI Credits allowance by plan」「What is billed in AI credits?」「What happens if I exceed my included AI credits?」 |
+| [S3] | [Usage-based billing for organizations and enterprises](https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/billing) | 「How do AI credits work?」「What happens if I exceed my included AI credits?」「Update your IDE, client, and extension」 |
+| [S4] | [Models and pricing for GitHub Copilot](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing) | 「How model pricing works」「Pricing tables」「Code completions」「Pricing and usage cost considerations for Copilot code review」 |
+| [S5] | [Budgets for usage-based billing](https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/budgets) | 「User-level budget」「Cost center budget」「Included usage controls for cost centers」「Organization budget」 |
 
 ## 参考
 
@@ -198,7 +212,7 @@ aic_quantity,aic_gross_amount
 料金・クレジット数・対象機能・モデル単価は変更される可能性があるため、利用時は GitHub 公式ドキュメントを優先してください。
 
 [S1]: https://github.blog/jp/2026-04-28-github-copilot-is-moving-to-usage-based-billing/
-[S2]: https://docs.github.com/ja/copilot/concepts/billing/usage-based-billing-for-individuals
-[S3]: https://docs.github.com/ja/copilot/concepts/billing/usage-based-billing-for-organizations-and-enterprises
-[S4]: https://docs.github.com/ja/copilot/reference/copilot-billing/models-and-pricing
-[S5]: https://docs.github.com/ja/copilot/concepts/billing/budgets-for-usage-based-billing
+[S2]: https://docs.github.com/en/copilot/concepts/billing-and-usage/individuals/billing
+[S3]: https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/billing
+[S4]: https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing
+[S5]: https://docs.github.com/en/copilot/concepts/billing-and-usage/organizations-and-enterprises/budgets
