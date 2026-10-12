@@ -156,29 +156,41 @@ Copilot Pro / Pro+ の既存の年次契約は、年次契約の有効期間中�
 
 ## CSV から利用額を計算する
 
-このリポジトリには、Deno で動作する TypeScript CLI が含まれています。GitHub の使用状況レポート CSV に含まれる `aic_quantity` と `aic_gross_amount` を読み込み、AI Credits と推定金額を合計します。外部依存はありません。
+このリポジトリには、Deno で動作する TypeScript CLI が含まれています。GitHub の使用状況レポート CSV を読み込み、AI Credits と金額を合計します。外部依存はありません。
+
+### 対応する CSV 形式
+
+列名から形式を自動判定します。必要な列以外は無視されます。
+
+| 形式 | 必須列 | 任意列 |
+| --- | --- | --- |
+| 課金プレビュー用レポート（移行期） | `aic_quantity`, `aic_gross_amount` | — |
+| 現行の使用状況レポート / AI usage report [S8] | `quantity`, `gross_amount` | `discount_amount`, `net_amount` |
+
+- 金額・数量は固定小数点（小数 9 桁）で集計するため、1 クレジット未満の利用や 1 セント未満の金額を多数合計しても浮動小数点誤差が生じません。`$` や桁区切り、指数表記（`1e-5`）も受け付けます。
+- Metered usage の Summarized / Detailed usage report は Actions など他製品の行を含みます。`product` / `sku` 列に複数の値がある場合は、無関係な数量を合算しないようエラーになるため、`--product` / `--sku` で AI Credits の行を指定してください。
+- 総額が「AI Credits × $0.01」と 1%（最低 $0.01）以上ずれている場合は、誤った行・列を集計している可能性があるため警告を表示します。データ行が 0 件の場合やフィルタに一致しない場合も警告します。
 
 ### 前提
 
-- [Deno](https://deno.com/) がインストールされていること
+- [Deno](https://deno.com/) 2.x がインストールされていること
 - GitHub の使用状況レポート CSV をダウンロードしていること
-- CSV に `aic_quantity` と `aic_gross_amount` の列が含まれていること
 
-> [!NOTE]
-> 現在の CLI は課金プレビュー用レポートの `aic_quantity` / `aic_gross_amount` 列にのみ対応しています。移行後の AI usage report（`quantity` / `gross_amount` / `net_amount` 列）は未対応のため、そのまま渡すと必須列不足のエラーになります [S8]。
-
-CLI の型チェックは次のコマンドで実行できます。
+型チェック・テスト・Lint は次のコマンドで実行できます。
 
 ```bash
 deno task check
+deno task test
+deno task lint
 ```
 
 ### 基本的な使い方
 
-CSV 全体の合計を確認します。
+CSV 全体の合計を確認します。`-` を指定すると標準入力から読み込みます。
 
 ```bash
 deno task calculate ./usage-report.csv
+cat ./usage-report.csv | deno task calculate -
 ```
 
 プランに含まれる AI Credits と比較し、残量・超過クレジット・超過見込み額を確認できます。
@@ -186,16 +198,17 @@ deno task calculate ./usage-report.csv
 ```bash
 deno task calculate ./usage-report.csv --plan pro
 deno task calculate ./usage-report.csv --plan business --seats 100
-deno task calculate ./usage-report.csv --plan enterprise --seats 50
+deno task calculate ./usage-report.csv --plan=enterprise --seats=50
 ```
 
 出力例:
 
 ```text
 CSV: usage-report.csv
+Report format: billing preview (aic_*)
 Rows: 2
 AI Credits used: 1,250
-Estimated gross amount: $12.50
+Gross amount: $12.50
 Plan: Copilot Pro
 Seats: 1
 Included AI Credits: 1,500
@@ -204,19 +217,33 @@ Overage AI Credits: 0
 Estimated overage amount: $0.00
 ```
 
+現行レポートで `discount_amount` / `net_amount` 列がある場合は、含まれる使用量による割引額と、実際の請求対象額（`net_amount`）も表示されます。
+
+ユーザー・モデル・日付などの内訳や、JSON 出力も可能です。
+
+```bash
+deno task calculate ./ai-usage-report.csv --group-by user
+deno task calculate ./ai-usage-report.csv --group-by model --json
+deno task calculate ./detailed-usage-report.csv --product copilot --group-by date
+```
+
 ### オプション
 
 | オプション | 説明 |
 | --- | --- |
-| `--plan <plan>` | `pro`, `pro-plus`, `max`, `business`, `enterprise` のいずれかを指定し、プランに含まれるクレジットと比較します。 |
+| `--plan <plan>` | `pro`, `pro-plus`, `max`, `business`, `enterprise` のいずれかを指定し、プランに含まれるクレジットと比較します（大文字小文字は区別しません）。 |
 | `--seats <number>` | Business / Enterprise の含まれるクレジットをシート数倍して見積もります。`--plan business` または `--plan enterprise` と併用してください。既定値は `1` です。正の整数を指定してください。 |
+| `--product <value>` | `product` 列が一致する行だけを集計します（大文字小文字は区別しません）。 |
+| `--sku <value>` | `sku` 列が一致する行だけを集計します（大文字小文字は区別しません）。 |
+| `--group-by <key>` | `date`, `user`, `model`, `sku`, `product`, `organization`, `cost-center` ごとの内訳を表示します。対応する列（`date`, `username`, `model`, `sku`, `product`, `organization`, `cost_center_name`）が必要です。 |
+| `--json` | 機械可読な JSON を出力します（警告は `warnings` 配列に含まれます）。 |
 | `-h`, `--help` | ヘルプを表示します。 |
 
-`business` と `enterprise` では、集計結果に課金エンティティ単位のクレジットプールであることが表示されます。`--seats` による計算は、全シートが同じプランで 1 か月分の枠を持つという単純化した見積もりです。混在プラン、月途中のライセンス追加・削除、プロモーション対象外、ユーザーレベル予算、コストセンター・組織・Enterprise の予算は反映されないため、実際の利用可否や請求額の判定には使えません。`--plan` を省略した場合は、プラン比較を行わず CSV の集計結果だけを表示します。
+すべての値付きオプションは `--option value` と `--option=value` のどちらでも指定できます。
+
+`business` と `enterprise` では、集計結果に課金エンティティ単位のクレジットプールであることが表示されます。`--seats` による計算は、全シートが同じプランで 1 か月分の枠を持つという単純化した見積もりです。混在プラン、月途中のライセンス追加・削除、ユーザーレベル予算、コストセンター・組織・Enterprise の予算は反映されないため、実際の利用可否や請求額の判定には使えません。実際の請求対象額は、現行レポートの `net_amount` を参照してください。
 
 ### CSV の入力例
-
-必要な列以外は無視されます。金額列には `$` や桁区切りを含む値も指定できます。
 
 ```csv
 aic_quantity,aic_gross_amount
@@ -224,7 +251,13 @@ aic_quantity,aic_gross_amount
 250,2.50
 ```
 
-不正な CSV、必須列の不足、空欄・負数を含む数値として解釈できない値がある場合は、エラーを表示して終了します。
+```csv
+date,username,model,quantity,gross_amount,discount_amount,net_amount
+2026-10-01,alice,gpt-5.4,100,1.00,1.00,0
+2026-10-01,bob,claude-sonnet-4.6,50.5,0.505,0.25,0.255
+```
+
+不正な CSV（閉じられていない引用符、列数超過、空・重複ヘッダーなど）、必須列の不足、空欄・負数を含む数値として解釈できない値がある場合は、行番号付きのエラーを表示して終了コード 1 で終了します。
 
 ## 情報源とポインタ
 

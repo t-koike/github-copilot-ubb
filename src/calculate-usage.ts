@@ -1,370 +1,318 @@
-export type Plan = "pro" | "pro-plus" | "max" | "business" | "enterprise";
+/**
+ * CLI: aggregate GitHub Copilot AI Credits from a usage report CSV.
+ *
+ *   deno task calculate <usage-report.csv> [--plan <plan>] [--seats <n>] [--json] ...
+ */
 
-type PlanConfig = {
-  label: string;
-  includedCredits: number;
-  pooled: boolean;
-};
+import { parseCsvTable } from "./csv.ts";
+import { formatNumber, formatUsd, toNumber } from "./decimal.ts";
+import { isPooledPlan, parsePlan, type Plan, PLAN_NAMES } from "./plans.ts";
+import {
+  compareWithPlan,
+  type Filters,
+  GROUP_BY_COLUMNS,
+  type GroupBy,
+  type GroupTotals,
+  type PlanComparison,
+  summarizeUsage,
+  type Totals,
+  type UsageSummary,
+} from "./usage.ts";
 
-export type CsvRecord = Record<string, string>;
+export { type CsvRecord, parseCsvTable } from "./csv.ts";
+export { parsePlan, type Plan } from "./plans.ts";
+export { compareWithPlan, detectFormat, summarizeUsage } from "./usage.ts";
 
-const PLAN_CONFIGS: Record<Plan, PlanConfig> = {
-  pro: { label: "Copilot Pro", includedCredits: 1_500, pooled: false },
-  "pro-plus": { label: "Copilot Pro+", includedCredits: 7_000, pooled: false },
-  max: { label: "Copilot Max", includedCredits: 20_000, pooled: false },
-  business: { label: "Copilot Business", includedCredits: 1_900, pooled: true },
-  enterprise: { label: "Copilot Enterprise", includedCredits: 3_900, pooled: true },
-};
-
-type Options = {
+export type Options = {
   csvPath: string;
   plan?: Plan;
   seats: number;
+  json: boolean;
+  groupBy?: GroupBy;
+  filters: Filters;
+  help: boolean;
 };
 
-export type UsageTotals = {
-  rows: number;
-  aiCredits: number;
-  grossAmountCents: number;
-};
+const VALUE_OPTIONS = ["--plan", "--seats", "--group-by", "--product", "--sku"] as const;
+type ValueOption = typeof VALUE_OPTIONS[number];
 
-async function main(): Promise<void> {
-  const options = parseArgs(Deno.args);
-  const csv = await Deno.readTextFile(options.csvPath);
-  const records = parseCsv(csv);
-  const totals = calculateTotals(records);
-
-  printSummary(options, totals);
-}
-
-function parseArgs(args: string[]): Options {
-  let csvPath = "";
-  let plan: Plan | undefined;
-  let seats = 1;
+export function parseArgs(args: string[]): Options {
+  const options: Options = { csvPath: "", seats: 1, json: false, filters: {}, help: false };
+  let seatsSpecified = false;
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
 
     if (arg === "--help" || arg === "-h") {
-      printHelp();
-      Deno.exit(0);
+      options.help = true;
+      return options;
     }
 
-    if (arg === "--plan") {
-      plan = parsePlan(readRequiredValue(args, index += 1, "--plan"));
+    if (arg === "--json") {
+      options.json = true;
       continue;
     }
 
-    if (arg === "--seats") {
-      seats = parsePositiveInteger(readRequiredValue(args, index += 1, "--seats"), "--seats");
+    const [name, inlineValue] = splitOption(arg);
+    if (isValueOption(name)) {
+      let value = inlineValue;
+      if (value === undefined) {
+        index += 1;
+        value = args[index];
+      }
+      if (
+        value === undefined || value === "" || (inlineValue === undefined && value.startsWith("-"))
+      ) {
+        throw new Error(`${name} requires a value.`);
+      }
+
+      switch (name) {
+        case "--plan":
+          options.plan = parsePlan(value);
+          break;
+        case "--seats":
+          options.seats = parsePositiveInteger(value, "--seats");
+          seatsSpecified = true;
+          break;
+        case "--group-by":
+          options.groupBy = parseGroupBy(value);
+          break;
+        case "--product":
+          options.filters.product = value;
+          break;
+        case "--sku":
+          options.filters.sku = value;
+          break;
+      }
       continue;
     }
 
-    if (arg.startsWith("-")) {
+    if (arg.startsWith("-") && arg !== "-") {
       throw new Error(`Unknown option: ${arg}`);
     }
 
-    if (csvPath !== "") {
+    if (options.csvPath !== "") {
       throw new Error(`Unexpected argument: ${arg}`);
     }
 
-    csvPath = arg;
+    options.csvPath = arg;
   }
 
-  if (csvPath === "") {
+  if (options.csvPath === "") {
     throw new Error("CSV file path is required. Run with --help for usage.");
   }
 
-  if (plan === undefined && seats !== 1) {
-    throw new Error("--seats requires --plan business or --plan enterprise.");
-  }
-
-  if (plan !== undefined && !isPooledPlan(plan) && seats !== 1) {
+  if (seatsSpecified && (options.plan === undefined || !isPooledPlan(options.plan))) {
     throw new Error("--seats can only be used with --plan business or --plan enterprise.");
   }
 
-  return { csvPath, plan, seats };
+  return options;
 }
 
-function readRequiredValue(args: string[], index: number, optionName: string): string {
-  const value = args[index];
-
-  if (value === undefined || value.startsWith("-")) {
-    throw new Error(`${optionName} requires a value.`);
+function splitOption(arg: string): [string, string | undefined] {
+  const equalsIndex = arg.indexOf("=");
+  if (!arg.startsWith("--") || equalsIndex === -1) {
+    return [arg, undefined];
   }
 
-  return value;
+  return [arg.slice(0, equalsIndex), arg.slice(equalsIndex + 1)];
 }
 
-export function parsePlan(value: string): Plan {
-  if (isPlan(value)) {
-    return value;
-  }
-
-  throw new Error(
-    `Unknown plan: ${value}. Supported plans: ${Object.keys(PLAN_CONFIGS).join(", ")}`,
-  );
-}
-
-function isPlan(value: string): value is Plan {
-  return Object.prototype.hasOwnProperty.call(PLAN_CONFIGS, value);
-}
-
-function isPooledPlan(plan: Plan): boolean {
-  return PLAN_CONFIGS[plan].pooled;
+function isValueOption(name: string): name is ValueOption {
+  return (VALUE_OPTIONS as readonly string[]).includes(name);
 }
 
 export function parsePositiveInteger(value: string, optionName: string): number {
-  const parsed = Number(value);
+  const parsed = /^\d+$/.test(value.trim()) ? Number(value) : Number.NaN;
 
-  if (!Number.isInteger(parsed) || parsed <= 0) {
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
     throw new Error(`${optionName} must be a positive integer.`);
   }
 
   return parsed;
 }
 
-export function parseCsv(csv: string): CsvRecord[] {
-  const rows = parseCsvRows(csv.replace(/^\uFEFF/, ""));
-
-  if (rows.length === 0) {
-    throw new Error("CSV is empty.");
+function parseGroupBy(value: string): GroupBy {
+  if (Object.prototype.hasOwnProperty.call(GROUP_BY_COLUMNS, value)) {
+    return value as GroupBy;
   }
 
-  const headers = rows[0].map((header) => header.trim());
-  if (headers.some((header) => header === "")) {
-    throw new Error("CSV contains an empty header.");
-  }
-
-  const duplicateHeaders = headers.filter((header, index) => headers.indexOf(header) !== index);
-  if (duplicateHeaders.length > 0) {
-    throw new Error(`CSV contains duplicate headers: ${[...new Set(duplicateHeaders)].join(", ")}`);
-  }
-
-  const missingHeaders = ["aic_quantity", "aic_gross_amount"].filter(
-    (requiredHeader) => !headers.includes(requiredHeader),
-  );
-
-  if (missingHeaders.length > 0) {
-    throw new Error(`CSV is missing required columns: ${missingHeaders.join(", ")}`);
-  }
-
-  return rows.slice(1).filter(hasAnyValue).map((row, rowIndex) => {
-    const record: CsvRecord = {};
-
-    for (let columnIndex = 0; columnIndex < headers.length; columnIndex += 1) {
-      record[headers[columnIndex]] = row[columnIndex] ?? "";
-    }
-
-    if (row.length > headers.length) {
-      throw new Error(`Row ${rowIndex + 2} has more columns than the header row.`);
-    }
-
-    return record;
-  });
-}
-
-function parseCsvRows(csv: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = "";
-  let inQuotes = false;
-  let afterClosingQuote = false;
-
-  for (let index = 0; index < csv.length; index += 1) {
-    const char = csv[index];
-    const nextChar = csv[index + 1];
-
-    if (char === '"') {
-      if (afterClosingQuote) {
-        throw new Error("CSV contains characters after a closing quote.");
-      }
-
-      if (inQuotes) {
-        if (nextChar === '"') {
-          field += '"';
-          index += 1;
-        } else {
-          inQuotes = false;
-          afterClosingQuote = true;
-        }
-      } else if (field === "") {
-        inQuotes = true;
-      } else {
-        throw new Error("CSV contains a quote inside an unquoted field.");
-      }
-      continue;
-    }
-
-    if (inQuotes) {
-      field += char;
-      continue;
-    }
-
-    if (char === ",") {
-      row.push(field);
-      field = "";
-      afterClosingQuote = false;
-      continue;
-    }
-
-    if (char === "\n" || char === "\r") {
-      if (char === "\r" && nextChar === "\n") {
-        index += 1;
-      }
-
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = "";
-      afterClosingQuote = false;
-      continue;
-    }
-
-    if (afterClosingQuote) {
-      throw new Error("CSV contains characters after a closing quote.");
-    }
-
-    field += char;
-  }
-
-  if (inQuotes) {
-    throw new Error("CSV contains an unterminated quoted field.");
-  }
-
-  if (field !== "" || row.length > 0 || afterClosingQuote) {
-    row.push(field);
-    rows.push(row);
-  }
-
-  return rows;
-}
-
-function hasAnyValue(row: string[]): boolean {
-  return row.some((value) => value.trim() !== "");
-}
-
-export function calculateTotals(records: CsvRecord[]): UsageTotals {
-  return records.reduce<UsageTotals>(
-    (totals, record, index) => ({
-      rows: totals.rows + 1,
-      aiCredits: totals.aiCredits + parseNumber(record.aic_quantity, index + 2, "aic_quantity"),
-      grossAmountCents: totals.grossAmountCents +
-        parseUsdCents(record.aic_gross_amount, index + 2, "aic_gross_amount"),
-    }),
-    { rows: 0, aiCredits: 0, grossAmountCents: 0 },
+  throw new Error(
+    `Unknown --group-by value: ${value}. Supported: ${Object.keys(GROUP_BY_COLUMNS).join(", ")}`,
   );
 }
 
-function parseNumber(value: string, rowNumber: number, columnName: string): number {
-  const normalized = value.trim().replace(/^\$/, "").replace(/,/g, "");
-
-  if (normalized === "") {
-    throw new Error(`Row ${rowNumber} column ${columnName} is empty.`);
-  }
-
-  const parsed = Number(normalized);
-
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error(
-      `Row ${rowNumber} column ${columnName} must be a non-negative number: ${value}`,
-    );
-  }
-
-  return parsed;
-}
-
-function parseUsdCents(value: string, rowNumber: number, columnName: string): number {
-  const normalized = value.trim().replace(/^\$/, "").replace(/,/g, "");
-
-  if (normalized === "") {
-    throw new Error(`Row ${rowNumber} column ${columnName} is empty.`);
-  }
-
-  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) {
-    throw new Error(
-      `Row ${rowNumber} column ${columnName} must be a non-negative USD amount with at most 2 decimals: ${value}`,
-    );
-  }
-
-  const [whole, fraction = ""] = normalized.split(".");
-  const cents = Number(`${whole}${fraction.padEnd(2, "0")}`);
-
-  if (!Number.isSafeInteger(cents)) {
-    throw new Error(`Row ${rowNumber} column ${columnName} is too large: ${value}`);
-  }
-
-  return cents;
-}
-
-function printSummary(options: Options, totals: UsageTotals): void {
+export function formatText(
+  csvName: string,
+  summary: UsageSummary,
+  comparison: PlanComparison | undefined,
+): string {
+  const { totals } = summary;
   const lines = [
-    `CSV: ${basename(options.csvPath)}`,
+    `CSV: ${csvName}`,
+    `Report format: ${
+      summary.format === "preview" ? "billing preview (aic_*)" : "usage report (quantity)"
+    }`,
     `Rows: ${totals.rows}`,
     `AI Credits used: ${formatNumber(totals.aiCredits)}`,
-    `Estimated gross amount: ${formatUsd(totals.grossAmountCents / 100)}`,
+    `Gross amount: ${formatUsd(totals.grossAmount)}`,
   ];
 
-  if (options.plan !== undefined) {
-    const planConfig = PLAN_CONFIGS[options.plan];
-    const includedCredits = planConfig.includedCredits * options.seats;
-    const overageCredits = Math.max(totals.aiCredits - includedCredits, 0);
-    const remainingCredits = Math.max(includedCredits - totals.aiCredits, 0);
+  if (totals.discountAmount !== undefined) {
+    lines.push(`Discount amount (included usage): ${formatUsd(totals.discountAmount)}`);
+  }
+  if (totals.netAmount !== undefined) {
+    lines.push(`Net amount (billed): ${formatUsd(totals.netAmount)}`);
+  }
 
+  if (comparison !== undefined) {
     lines.push(
-      `Plan: ${planConfig.label}`,
-      `Seats: ${options.seats}`,
-      `Included AI Credits: ${formatNumber(includedCredits)}`,
-      `Remaining AI Credits: ${formatNumber(remainingCredits)}`,
-      `Overage AI Credits: ${formatNumber(overageCredits)}`,
-      `Estimated overage amount: ${formatUsd(overageCredits * 0.01)}`,
+      `Plan: ${comparison.label}`,
+      `Seats: ${comparison.seats}`,
+      `Included AI Credits: ${formatNumber(comparison.includedCredits)}`,
+      `Remaining AI Credits: ${formatNumber(comparison.remainingCredits)}`,
+      `Overage AI Credits: ${formatNumber(comparison.overageCredits)}`,
+      `Estimated overage amount: ${formatUsd(comparison.overageAmount)}`,
     );
 
-    if (planConfig.pooled) {
+    if (comparison.pooled) {
       lines.push("Pooling: enabled at billing entity level");
     }
   }
 
-  console.log(lines.join("\n"));
+  if (summary.groups !== undefined) {
+    lines.push("", ...formatGroupTable(summary.groups));
+  }
+
+  return lines.join("\n");
+}
+
+function formatGroupTable(groups: GroupTotals[]): string[] {
+  const rows = [
+    ["Key", "Rows", "AI Credits", "Gross amount"],
+    ...groups.map((group) => [
+      group.key,
+      String(group.rows),
+      formatNumber(group.aiCredits),
+      formatUsd(group.grossAmount),
+    ]),
+  ];
+  const widths = rows[0].map((_, column) => Math.max(...rows.map((row) => row[column].length)));
+
+  return rows.map((row) =>
+    row.map((cell, column) =>
+      column === 0 ? cell.padEnd(widths[column]) : cell.padStart(widths[column])
+    )
+      .join("  ").trimEnd()
+  );
+}
+
+export function toJson(
+  csvName: string,
+  summary: UsageSummary,
+  comparison: PlanComparison | undefined,
+): Record<string, unknown> {
+  return {
+    csv: csvName,
+    format: summary.format,
+    totals: totalsToJson(summary.totals),
+    plan: comparison === undefined ? undefined : {
+      plan: comparison.plan,
+      label: comparison.label,
+      seats: comparison.seats,
+      pooled: comparison.pooled,
+      includedCredits: toNumber(comparison.includedCredits),
+      remainingCredits: toNumber(comparison.remainingCredits),
+      overageCredits: toNumber(comparison.overageCredits),
+      overageAmount: toNumber(comparison.overageAmount),
+    },
+    groups: summary.groups?.map((group) => ({ key: group.key, ...totalsToJson(group) })),
+    warnings: summary.warnings,
+  };
+}
+
+function totalsToJson(totals: Totals): Record<string, number | undefined> {
+  const optional = (value: bigint | undefined) => value === undefined ? undefined : toNumber(value);
+
+  return {
+    rows: totals.rows,
+    aiCredits: toNumber(totals.aiCredits),
+    grossAmount: toNumber(totals.grossAmount),
+    discountAmount: optional(totals.discountAmount),
+    netAmount: optional(totals.netAmount),
+  };
 }
 
 function basename(path: string): string {
-  const normalizedPath = path.replaceAll("\\", "/");
-  const lastSegment = normalizedPath.split("/").filter(Boolean).at(-1);
+  const lastSegment = path.replaceAll("\\", "/").split("/").filter(Boolean).at(-1);
 
   return lastSegment ?? path;
 }
 
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 2,
-  }).format(value);
+async function readInput(path: string): Promise<string> {
+  if (path === "-") {
+    return await new Response(Deno.stdin.readable).text();
+  }
+
+  try {
+    return await Deno.readTextFile(path);
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) {
+      throw new Error(`CSV file not found: ${path}`);
+    }
+    throw error;
+  }
 }
 
-function formatUsd(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(value);
-}
+export const HELP = `Usage: deno task calculate <usage-report.csv | -> [options]
 
-function printHelp(): void {
-  console.log(`Usage: deno task calculate <usage-report.csv> [options]
+Aggregates GitHub Copilot AI Credits from a usage report CSV ("-" reads stdin).
 
 Options:
-  --plan <plan>     Compare against included credits.
-                  Supported: pro, pro-plus, max, business, enterprise
-  --seats <number>  Number of Business/Enterprise seats for a pooled estimate. Default: 1
-                    Requires --plan business or --plan enterprise.
-  -h, --help        Show this help.
+  --plan <plan>         Compare against included credits.
+                        Supported: ${PLAN_NAMES.join(", ")}
+  --seats <number>      Business/Enterprise seats for a pooled estimate. Default: 1
+                        Requires --plan business or --plan enterprise.
+  --product <value>     Only include rows whose product column matches (case-insensitive).
+  --sku <value>         Only include rows whose sku column matches (case-insensitive).
+  --group-by <key>      Break down totals by: ${Object.keys(GROUP_BY_COLUMNS).join(", ")}
+  --json                Print machine-readable JSON.
+  -h, --help            Show this help.
 
-Required CSV columns:
-  aic_quantity      Used AI Credits
-  aic_gross_amount  Estimated gross amount in USD`);
+Options also accept the --option=value form.
+
+Supported CSV formats:
+  Billing preview report  aic_quantity, aic_gross_amount
+  Usage / AI usage report quantity, gross_amount [, discount_amount, net_amount]`;
+
+async function main(args: string[]): Promise<void> {
+  const options = parseArgs(args);
+
+  if (options.help) {
+    console.log(HELP);
+    return;
+  }
+
+  const table = parseCsvTable(await readInput(options.csvPath));
+  const summary = summarizeUsage(table, { filters: options.filters, groupBy: options.groupBy });
+  const comparison = options.plan === undefined
+    ? undefined
+    : compareWithPlan(summary.totals, options.plan, options.seats);
+  const csvName = options.csvPath === "-" ? "(stdin)" : basename(options.csvPath);
+
+  if (options.json) {
+    console.log(JSON.stringify(toJson(csvName, summary, comparison), null, 2));
+    return;
+  }
+
+  console.log(formatText(csvName, summary, comparison));
+  for (const warning of summary.warnings) {
+    console.error(`Warning: ${warning}`);
+  }
 }
 
 if (import.meta.main) {
-  main().catch((error: unknown) => {
+  main(Deno.args).catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`Error: ${message}`);
     Deno.exit(1);
